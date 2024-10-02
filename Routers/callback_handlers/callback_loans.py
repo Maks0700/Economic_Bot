@@ -1,22 +1,25 @@
+from aiogram.types import MessageEntity
 from aiogram.types import CallbackQuery,Message
 from aiogram import Router,F
 from magic_filter import RegexpMode
 from motor.core import AgnosticDatabase as MDB
 from aiogram.utils.markdown import hcode
-from Keyboards.keyboards_common import inline_builder
+from Keyboards.keyboards_common import inline_keyboard_builder
 from aiogram.fsm.context import FSMContext
 from Utils.states import TakeLoan
 from Filter.is_digit import IsDigit
 import pendulum
 import re
+
 router=Router()
+
 @router.callback_query(F.data=="loans")
 async def loan_call_process(query:CallbackQuery,data_base:MDB,state:FSMContext):
     user=await data_base.maks.find_one(dict(_id=query.from_user.id))
-    user['bank']['loans']['when']['start']=""
+    user['bank']['loans']['when']['start']=""#rewrite our data in pymongo 
     await state.set_state(TakeLoan.term)
     await query.message.answer("How a long time do you want to take a loan?")
-    await query.answer()#?????? I don t know 
+    await query.answer()#?????? callback think that to reply ahahahhahaha but not message in callback
     
 
 @router.message(TakeLoan.term,F.text.regexp(r"^[1-9]?$",mode=RegexpMode.SEARCH).as_("digit"))
@@ -24,7 +27,13 @@ async def take_loand_user(message:Message,state:FSMContext,digit:re.Match[str]):
     
     await state.update_data(term_value=digit.group())
     await state.set_state(TakeLoan.amount)
-    await message.answer(hcode("Enter amount!!"))
+    entities_bold=MessageEntity(
+        type="bold",
+        offset=1,
+        length=len("Enter amount!!")
+    )
+    entities=[entities_bold]
+    await message.answer("Enter amount!!",entities=entities)
 
 
 @router.message(TakeLoan.term)
@@ -43,14 +52,14 @@ async def amount_process(message:Message,state:FSMContext,data_base:MDB):
         data=await state.get_data()
         await state.clear()
         await message.answer("You are applied your loan and amount in database!!Congratulations!!",
-                             reply_markup=inline_builder("⬅️Back","bank"))
+                             reply_markup=inline_keyboard_builder("⬅️Back","bank"))
         current_datetime=pendulum.now("UTC")#define current datetime
         end_datetime=current_datetime.add(int(data["term_value"]))#define end_time
     await data_base.maks.update_one(
         {"_id":message.from_user.id},
         {
             "$inc":{"balance":amount_total},
-            "$set":{"bank.loans.when.start":current_datetime,"bank.loans.when.end":end_datetime,"bank.loans.total_amout":amount_total}
+            "$set":{"bank.loans.when.start":current_datetime,"bank.loans.when.end":end_datetime,"bank.loans.total_amount":amount_total}
             
             
             
